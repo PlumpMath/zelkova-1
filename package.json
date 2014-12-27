@@ -1,0 +1,27 @@
+{
+  "name": "zelkova",
+  "version": "0.0.1",
+  "description": "Elm-inspired FRP for TypeScript and JavaScript",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/thisismN/zelkova.git"
+  },
+  "author": {
+    "name": "Gary Burgess",
+    "email": "gary.burgess@gmail.com"
+  },
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/thisismN/zelkova/issues"
+  },
+  "homepage": "https://github.com/thisismN/zelkova",
+  "devDependencies": {
+    "event-stream": "^3.2.0",
+    "gulp": "^3.8.10",
+    "gulp-tslint": "^1.4.1",
+    "gulp-typescript": "^2.3.0",
+    "rimraf": "^2.2.8",
+    "tslint": "^1.0.1",
+    "typescript": "^1.3.0"
+  }
+}
