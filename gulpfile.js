@@ -3,6 +3,7 @@ var rimraf = require("rimraf");
 var ts = require("gulp-typescript");
 var tslint = require("gulp-tslint");
 var eventStream = require("event-stream");
+var nodeunit = require("gulp-nodeunit");
 
 var tsPath = "src/*.ts";
 
@@ -36,6 +37,12 @@ gulp.task("make", function () {
   return eventStream
     .merge(tsResult.dts.pipe(gulp.dest("dist/defs")),
            tsResult.js.pipe(gulp.dest("dist/js")));
+});
+
+gulp.task("test", function () {
+  return gulp
+    .src("test/test-*.js")
+    .pipe(nodeunit());
 });
 
 gulp.task("default", ["clean", "lint", "make"]);
