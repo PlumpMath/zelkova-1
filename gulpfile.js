@@ -6,6 +6,7 @@ var eventStream = require("event-stream");
 var nodeunit = require("gulp-nodeunit");
 
 var tsPath = "src/*.ts";
+var testPath = "test/test-*.js";
 
 var tsProject = ts.createProject({
   module: "commonjs",
@@ -29,7 +30,7 @@ gulp.task("lint", function () {
     }));
 });
 
-gulp.task("make", function () {
+gulp.task("make", ["clean", "lint"], function () {
   var tsResult = gulp
     .src(tsPath)
     .pipe(ts(tsProject));
@@ -39,14 +40,14 @@ gulp.task("make", function () {
            tsResult.js.pipe(gulp.dest("dist/js")));
 });
 
-gulp.task("test", function () {
+gulp.task("test", ["make"], function () {
   return gulp
-    .src("test/test-*.js")
+    .src(testPath)
     .pipe(nodeunit());
 });
 
-gulp.task("default", ["clean", "lint", "make"]);
+gulp.task("default", ["test"]);
 
 gulp.task("watch", ["default"], function () {
-  gulp.watch(tsPath, ["lint", "make"]);
+  gulp.watch([tsPath, testPath], ["test"]);
 });
