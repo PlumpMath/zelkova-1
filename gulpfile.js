@@ -8,6 +8,11 @@ var nodeunit = require("gulp-nodeunit");
 var tsPath = "src/*.ts";
 var testPath = "test/test-*.js";
 
+var printError = function (err) {
+  console.error(err);
+  this.emit("end");
+};
+
 var tsProject = ts.createProject({
   module: "commonjs",
   declarationFiles: true,
@@ -37,17 +42,19 @@ gulp.task("make", ["clean", "lint"], function () {
 
   return eventStream
     .merge(tsResult.dts.pipe(gulp.dest("dist/defs")),
-           tsResult.js.pipe(gulp.dest("dist/js")));
+           tsResult.js.pipe(gulp.dest("dist/js")))
+    .on("error", printError);
 });
 
 gulp.task("test", ["make"], function () {
   return gulp
     .src(testPath)
-    .pipe(nodeunit());
+    .pipe(nodeunit())
+    .on("error", printError);
 });
 
 gulp.task("default", ["test"]);
 
 gulp.task("watch", ["default"], function () {
-  gulp.watch([tsPath, testPath], ["test"]);
+  gulp.watch([tsPath, "test/*.js"], ["test"]);
 });

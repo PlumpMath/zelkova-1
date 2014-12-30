@@ -4,22 +4,26 @@ var Z = require("../dist/js/zelkova");
 
 module.exports = {
 
-  "A channel has a value by default": function (test) {
-    var chan = new Z.Channel(true);
-    chan.subscribe(function (value) {
-      test.ok(value);
-      test.done();
-    });
+  "A channel must be provided a default value": function (test) {
+    test.throws(function () { new Z.Channel() }, Error);
+    test.done();
   },
 
-  "A channel can emit values": function (test) {
+  "A channel's signal should start with the specified value": function (test) {
+    var v = {};
+    var chan = new Z.Channel(v);
+    test.strictEqual(chan.signal._value, v);
+    test.done();
+  },
+
+  "A channel can send values to its signal": function (test) {
     var chan = new Z.Channel(true);
     var expectedValues = [true, false];
-    chan.subscribe(function (value) {
+    chan.signal.subscribe(function (value) {
       test.ok(value === expectedValues.shift());
       if (expectedValues.length === 0) test.done();
     });
-    chan.emit(false);
+    chan.send(false);
   }
 
 };

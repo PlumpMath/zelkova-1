@@ -1,10 +1,120 @@
 "use strict";
 
-interface Dictionary<A> {
-  [index: string]: A;
+// export interface SignalID extends String {}
+
+// var mkId: () => SignalID = (function () {
+//   var id = 0;
+//   return () => "signal-" + (++id);
+// }());
+
+export interface Listener<A> {
+  (value: A, silent: Boolean): void;
+}
+
+export class Signal<A> {
+
+  // id: SignalID;
+  _value: A;
+  _listeners: Array<Listener<A>>;
+
+  constructor(value: A) {
+    // this.id = mkId();
+    this._value = value;
+    this._listeners = [];
+  }
+
+  _update(value: A, silent: Boolean): void {
+    if (!silent) this._value = value;
+    this._listeners.forEach(fn => fn(value, silent));
+  }
+
+  subscribe(fn: (value: A) => void): void {
+    this._listeners.push((value, silent) => {
+      if (!silent) fn(value);
+    });
+    fn(this._value);
+  }
+
+  map<B>(fn: (value: A) => B): Signal<B> {
+    var s = new Signal(fn(this._value));
+    this._listeners.push((value, silent) => {
+      s._update(silent ? undefined : fn(value), silent);
+    });
+    return s;
+  }
+
+  private filterIf(val: boolean, fn: (value: A) => boolean, initValue: A): Signal<A> {
+    var s = new Signal(fn(this._value) === val ? this._value : initValue);
+    this._listeners.push((value, silent) => {
+      s._update(value, silent || fn(value) !== val);
+    });
+    return s;
+  }
+
+  keepIf(fn: (value: A) => boolean, initValue: A): Signal<A> {
+    if (arguments.length < 2) {
+      throw new Error("keepIf requires a predicate and default value");
+    }
+    return this.filterIf(true, fn, initValue);
+  }
+
+  dropIf(fn: (value: A) => boolean, initValue: A): Signal<A> {
+    if (arguments.length < 2) {
+      throw new Error("dropIf requires a predicate and default value");
+    }
+    return this.filterIf(false, fn, initValue);
+  }
+
+  dropRepeats(fn?: (prev: A, next: A) => boolean): Signal<A> {
+    var s = new Signal(this._value);
+    var test = fn == null ? (x, y) => x === y : fn;
+    var prevValue = this._value;
+    this._listeners.push((value, silent) => {
+      if (silent || test(prevValue, value)) {
+        s._update(undefined, true);
+      } else {
+        s._update(prevValue = value, false);
+      }
+    });
+    return s;
+  }
+
+}
+
+export function constant<A>(value: A): Signal<A> {
+  return new Signal(value);
 };
 
-export interface CombineFunc {
+export class Channel<A> {
+
+  signal: Signal<A>;
+
+  constructor(value: A) {
+    if (arguments.length === 0) {
+      throw new Error("A default value must be provided for a Channel");
+    }
+    this.signal = new Signal(value);
+  }
+
+  send(value: A): Channel<A> {
+    this.signal._update(value, false);
+    return this;
+  }
+
+};
+
+export function merge<A>(...signals: Array<Signal<A>>): Signal<A> {
+  // TODO: keep leftmost update when multiple signals arrive at once
+  var s = new Signal(signals[0]._value);
+  signals.forEach(signal => {
+    signal._listeners.push((value, silent) => {
+      s._update(value, silent);
+    });
+  });
+  return s;
+}
+
+export interface MapN {
   <A, B, C>(a: Signal<A>, b: Signal<B>,
     fn: (a: A, b: B) => C): Signal<C>;
 
@@ -18,99 +128,22 @@ export interface CombineFunc {
     fn: (a: A, b: B, c: C, d: D, e: E) => F): Signal<F>;
 };
 
-export interface Signal<A> {
-  map<B>(fn: (value: A) => B): Signal<B>;
-  dropIf(fn: (value: A) => boolean, initValue: A): Signal<A>;
-  dropRepeats(fn?: (prev: A, next: A) => boolean): Signal<A>;
-  subscribe(fn: (value: A) => void): void;
-};
-
-export class Channel<A> implements Signal<A> {
-
-  private value: A;
-  private listeners: Array<(value: A) => void>;
-
-  constructor(value: A) {
-    this.value = value;
-    this.listeners = [];
-  }
-
-  emit(value: A) {
-    this.listeners.forEach(fn => fn(value));
-  }
-
-  map<B>(fn: (value: A) => B): Signal<B> {
-    var chan = new Channel(fn(this.value));
-    this.listeners.push(value => chan.emit(fn(value)));
-    return chan;
-  }
-
-  private filterIf(fn: (value: A) => boolean, val: boolean, initValue: A): Signal<A> {
-    var chan = new Channel(fn(this.value) ? initValue : this.value);
-    this.listeners.push(value => {
-      if (fn(value) === val) chan.emit(value);
-    });
-    return chan;
-  }
-
-  keepIf(fn: (value: A) => boolean, initValue: A): Signal<A> {
-    return this.filterIf(fn, true, initValue);
-  }
-
-  dropIf(fn: (value: A) => boolean, initValue: A): Signal<A> {
-    return this.filterIf(fn, false, initValue);
-  }
-
-  dropRepeats(fn?: (prev: A, next: A) => boolean): Signal<A> {
-    var chan = new Channel(this.value);
-    var test = fn == null ? (x, y) => x === y : fn;
-    var prevValue = this.value;
-    this.listeners.push(value => {
-      if (!test(prevValue, value)) {
-        prevValue = value;
-        chan.emit(value);
-      }
-    });
-    return chan;
-  }
-
-  subscribe(fn: (value: A) => void): void {
-    this.listeners.push(fn);
-    fn(this.value);
-  }
-
-};
-
-export function merge<A>(...signals: Array<Signal<A>>): Signal<A> {
-  var chan, initValue;
-  signals.forEach(signal => {
-    signal.subscribe(value => {
-      if (chan != null) {
-        chan.emit(value);
-      } else if (initValue == null) {
-        initValue = value;
-      }
-    });
-  });
-  return (chan = new Channel(initValue));
-}
-
-export var mapN: CombineFunc = function (...args) {
+export var mapN: MapN = function (...args) {
   var fn: (...values) => void = args.pop();
   var signals: Array<Signal<any>> = args;
-
-  var values = [];
-  var getValue = () => fn.apply(undefined, values);
-  var emit = null;
-
-  signals.forEach((signal, i) => {
-    signal.subscribe(value => {
-      values[i] = value;
-      if (emit != null) emit();
-    });
-  });
-
-  var chan = new Channel(getValue());
-  emit = () => chan.emit(getValue());
-  return chan;
+  var value = () => fn.apply(undefined, signals.map(s => s._value));
+  var s = new Signal(value());
+  var updates = 0;
+  var expected = signals.length;
+  var silentBatch = true;
+  var update = (v, silent: Boolean) => {
+    if (!silent) silentBatch = false;
+    if (++updates === expected) {
+      updates = 0;
+      silentBatch = true;
+      s._update(silent ? undefined : value(), silent);
+    }
+  };
+  signals.forEach(signal => signal._listeners.push(update));
+  return s;
 };
