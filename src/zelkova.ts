@@ -1,24 +1,15 @@
 "use strict";
 
-// export interface SignalID extends String {}
-
-// var mkId: () => SignalID = (function () {
-//   var id = 0;
-//   return () => "signal-" + (++id);
-// }());
-
 export interface Listener<A> {
   (value: A, silent: Boolean): void;
 }
 
 export class Signal<A> {
 
-  // id: SignalID;
   _value: A;
   _listeners: Array<Listener<A>>;
 
   constructor(value: A) {
-    // this.id = mkId();
     this._value = value;
     this._listeners = [];
   }
@@ -90,9 +81,6 @@ export class Channel<A> {
   signal: Signal<A>;
 
   constructor(value: A) {
-    if (arguments.length === 0) {
-      throw new Error("A default value must be provided for a Channel");
-    }
     this.signal = new Signal(value);
   }
 
@@ -102,6 +90,13 @@ export class Channel<A> {
   }
 
 };
+
+export function channel<A>(value: A): Channel<A> {
+  if (arguments.length === 0) {
+    throw new Error("A default value must be provided for a Channel");
+  }
+  return new Channel(value);
+}
 
 export function merge<A>(...signals: Array<Signal<A>>): Signal<A> {
   // TODO: keep leftmost update when multiple signals arrive at once
@@ -146,4 +141,37 @@ export var mapN: MapN = function (...args) {
   };
   signals.forEach(signal => signal._listeners.push(update));
   return s;
+};
+
+export interface SubscribeN {
+  <A, B, C>(a: Signal<A>, b: Signal<B>,
+    fn: (a: A, b: B) => void): void;
+
+  <A, B, C, D>(a: Signal<A>, b: Signal<B>, c: Signal<C>,
+    fn: (a: A, b: B, c: C) => void): void;
+
+  <A, B, C, D, E>(a: Signal<A>, b: Signal<B>, c: Signal<C>, d: Signal<D>,
+    fn: (a: A, b: B, c: C, d: Signal<D>) => void): void;
+
+  <A, B, C, D, E, F>(a: Signal<A>, b: Signal<B>, c: Signal<C>, d: Signal<D>, e: Signal<E>,
+    fn: (a: A, b: B, c: C, d: D, e: E) => void): void;
+};
+
+export var subscribeN: SubscribeN = function (...args) {
+  var fn: (...values) => void = args.pop();
+  var signals: Array<Signal<any>> = args;
+  var run = () => fn.apply(undefined, signals.map(s => s._value));
+  var updates = 0;
+  var expected = signals.length;
+  var silentBatch = true;
+  var update = (v, silent: Boolean) => {
+    if (!silent) silentBatch = false;
+    if (++updates === expected) {
+      updates = 0;
+      silentBatch = true;
+      run();
+    }
+  };
+  signals.forEach(signal => signal._listeners.push(update));
+  run();
 };

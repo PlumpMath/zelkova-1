@@ -1,6 +1,6 @@
 "use strict";
 
-var Z = require("../dist/js/zelkova");
+var Z = require("../dist/zelkova");
 var test = require("./common").test;
 
 module.exports = {
@@ -138,37 +138,148 @@ module.exports = {
   },
 
   "dropRepeats": {
-
-  },
-
-  "keepWhen": {
-
-  },
-
-  "dropWhen": {
-
+    "should produce a new signal": function (test) {
+      var s1 = Z.constant({});
+      var s2 = s1.dropRepeats();
+      test.notEqual(s1, s2);
+      test.done();
+    },
+    "should drop strictly equal values without a predicate": (function () {
+      var v1 = {};
+      var v2 = {};
+      return test({
+        setup: function (s) {
+          return s.dropRepeats();
+        },
+        inputs: [0, 0, 1, 2, 3, 3, 3, v1, v2, v2],
+        outputs: [0, 1, 2, 3, v1, v2]
+      });
+    }()),
+    "should drop values using an equality predicate": test({
+      setup: function (s) {
+        return s.dropRepeats(function (x, y) { return x == y || x.length == y.length });
+      },
+      inputs: [[], [0], [1], [2], [1, 2]],
+      outputs: [[], [0], [1, 2]]
+    })
   },
 
   "merge": {
-
+    "should take the left-most value on creation": function (test) {
+      var s1 = Z.constant(1);
+      var s2 = Z.constant(2);
+      Z.merge(s1, s2).subscribe(function (value) {
+        test.strictEqual(value, 1);
+        test.done();
+      })
+    },
+    "should pass through values from multiple signals": function (test) {
+      var c1 = Z.channel(1);
+      var c2 = Z.channel(2);
+      var expectedValues = [1, 10, 20, 200, 100];
+      Z.merge(c1.signal, c2.signal).subscribe(function (value) {
+        if (expectedValues.length > 0) {
+          test.strictEqual(value, expectedValues.shift());
+          if (expectedValues.length === 0) test.done();
+        }
+      });
+      c1.send(10);
+      c2.send(20);
+      c2.send(200);
+      c1.send(100);
+    },
+    "should only take the left-most value when updates arrive simultaneously": function (test) {
+      test.pending();
+      var c = Z.channel(1);
+      var s1 = c.signal;
+      var s2 = s1.map(function (n) { return n * 100; });
+      var expectedValues = [1, 2, 3];
+      Z.merge(s1, s2).subscribe(function (value) {
+        if (expectedValues.length > 0) {
+          test.strictEqual(value, expectedValues.shift());
+          if (expectedValues.length === 0) test.done();
+        }
+      });
+      c.send(2).send(3);
+    }
   },
 
   "mapN": {
-  // "Combined signals should update atomically": function (test) {
-  //   var chan = new Z.Channel(1);
-  //   var s1 = chan.signal;
-  //   var s2 = s1.map(function (x) { return x * 2 });
-  //   var expectedValues = [[1, 2], [2, 4], [3, 6]];
-  //   Z.mapN(s1, s2, function (x, y) {
-  //     test.deepEqual([x, y], expectedValues.shift());
-  //     if (expectedValues.length === 0) test.done();
-  //   });
-  //   chan.send(2).send(3);
-  // }
+    "should computed the combined value immediately": function (test) {
+      var s1 = Z.constant(1);
+      var s2 = Z.constant(2);
+      var sunk = false;
+      Z.mapN(s1, s2, function () { sunk = true; });
+      test.ok(sunk);
+      test.done();
+    },
+    "should pass the value from each input to mapping function": function (test) {
+      var v1 = {};
+      var v2 = {};
+      var s1 = Z.constant(v1);
+      var s2 = Z.constant(v2);
+      Z.mapN(s1, s2, function (x, y) {
+        test.strictEqual(x, v1);
+        test.strictEqual(y, v2);
+        test.done();
+      });
+    },
+    "should apply the mapping function to produce the value of the new signal": function (test) {
+      var v = {};
+      var s1 = Z.constant({});
+      var s2 = Z.constant({});
+      var s3 = Z.mapN(s1, s2, function () { return v; })
+      s3.subscribe(function(value) {
+        test.strictEqual(value, v);
+        test.done();
+      });
+    },
+    "combinations of signals sharing the same source should be processed together": function (test) {
+      var chan = Z.channel(1);
+      var s1 = chan.signal;
+      var s2 = s1.map(function (x) { return x * 2 });
+      var s3 = s2.map(function (x) { return x * 10 });
+      var expectedValues = [[1, 2, 20], [2, 4, 40], [3, 6, 60]];
+      Z.mapN(s1, s2, s3, function (x, y, z) {
+        test.deepEqual([x, y, z], expectedValues.shift());
+        if (expectedValues.length === 0) test.done();
+      });
+      chan.send(2).send(3);
+    }
   },
 
   "subscribeN": {
-
+    "should computed the combined value immediately": function (test) {
+      var s1 = Z.constant(1);
+      var s2 = Z.constant(2);
+      var sunk = false;
+      Z.subscribeN(s1, s2, function () { sunk = true; });
+      test.ok(sunk);
+      test.done();
+    },
+    "should pass the value from each input to mapping function": function (test) {
+      var v1 = {};
+      var v2 = {};
+      var s1 = Z.constant(v1);
+      var s2 = Z.constant(v2);
+      Z.subscribeN(s1, s2, function (x, y) {
+        test.strictEqual(x, v1);
+        test.strictEqual(y, v2);
+        test.done();
+      });
+    },
+    "combinations of signals sharing the same source should be processed together": function (test) {
+      var chan = Z.channel(1);
+      var s1 = chan.signal;
+      var s2 = s1.map(function (x) { return x * 2 });
+      var s3 = s2.map(function (x) { return x * 10 });
+      var expectedValues = [[1, 2, 20], [2, 4, 40], [3, 6, 60]];
+      Z.subscribeN(s1, s2, s3, function (x, y, z) {
+        test.deepEqual([x, y, z], expectedValues.shift());
+        if (expectedValues.length === 0) test.done();
+      });
+      chan.send(2).send(3);
+    }
   }
 
 };

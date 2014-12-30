@@ -41,8 +41,8 @@ gulp.task("make", ["clean", "lint"], function () {
     .pipe(ts(tsProject));
 
   return eventStream
-    .merge(tsResult.dts.pipe(gulp.dest("dist/defs")),
-           tsResult.js.pipe(gulp.dest("dist/js")))
+    .merge(tsResult.dts.pipe(gulp.dest("dist")),
+           tsResult.js.pipe(gulp.dest("dist")))
     .on("error", printError);
 });
 
