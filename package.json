@@ -2,6 +2,7 @@
   "name": "zelkova",
   "version": "0.0.1",
   "description": "Elm-inspired FRP for TypeScript and JavaScript",
+  "main": "dist/zelkova.js",
   "repository": {
     "type": "git",
     "url": "https://github.com/thisismN/zelkova.git"

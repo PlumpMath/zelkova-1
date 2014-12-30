@@ -99,7 +99,6 @@ export function channel<A>(value: A): Channel<A> {
 }
 
 export function merge<A>(...signals: Array<Signal<A>>): Signal<A> {
-  // TODO: keep leftmost update when multiple signals arrive at once
   var s = new Signal(signals[0]._value);
   signals.forEach(signal => {
     signal._listeners.push((value, silent) => {

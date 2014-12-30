@@ -1,5 +1,6 @@
 .*
 !/.gitignore
+!/.npmignore
 /*.sublime*
 /node_modules
 /dist

@@ -1,0 +1,6 @@
+.*
+/src
+/test
+/*.sublime*
+/gulpfile.js
+/tslint.json

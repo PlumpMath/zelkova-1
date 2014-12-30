@@ -187,7 +187,7 @@ module.exports = {
       c2.send(20);
       c2.send(200);
       c1.send(100);
-    },
+    }/*,
     "should only take the left-most value when updates arrive simultaneously": function (test) {
       test.pending();
       var c = Z.channel(1);
@@ -201,11 +201,11 @@ module.exports = {
         }
       });
       c.send(2).send(3);
-    }
+    }*/
   },
 
   "mapN": {
-    "should computed the combined value immediately": function (test) {
+    "should compute the combined value immediately": function (test) {
       var s1 = Z.constant(1);
       var s2 = Z.constant(2);
       var sunk = false;
@@ -249,7 +249,7 @@ module.exports = {
   },
 
   "subscribeN": {
-    "should computed the combined value immediately": function (test) {
+    "should compute the combined value immediately": function (test) {
       var s1 = Z.constant(1);
       var s2 = Z.constant(2);
       var sunk = false;
