@@ -111,44 +111,52 @@ export function channel<A>(value: A): Channel<A> {
   return new Channel(value);
 }
 
-export function merge<A>(...signals: Array<Signal<A>>): Signal<A> {
+function getSources(signals) {
   var sources = [];
-  var sourceExpected: Dictionary<number> = {};
+  var expected: Dictionary<number> = {};
   signals.forEach(s => {
     s._sources.forEach(source => {
-      if (sourceExpected[source]) {
-        sourceExpected[source]++;
+      if (expected[source]) {
+        expected[source]++;
       } else {
         sources.push(source);
-        sourceExpected[source] = 1;
+        expected[source] = 1;
       }
     });
   });
+  return { sources: sources, expected: expected, updates: {} };
+}
+function checkExpectedSources(sources, source) {
+  if (sources.updates[source]) {
+    sources.updates[source]++;
+  } else {
+    sources.updates[source] = 1;
+  }
+  var ready = true;
+  for (var k in sources.updates) {
+    if (sources.updates.hasOwnProperty(k)) {
+      if (sources.updates[k] < sources.expected[k]) {
+        ready = false;
+        break;
+      }
+    }
+  }
+  if (ready) sources.updates = {};
+  return ready;
+}
+
+export function merge<A>(...signals: Array<Signal<A>>): Signal<A> {
+  var sources = getSources(signals);
   var nextValue = signals[0]._value;
   var nextIndex = Infinity;
   var s = new Signal(sources, nextValue);
-  var sourceUpdates: Dictionary<number> = {};
   var update = (value, silent, source, index) => {
-    if (sourceUpdates[source]) {
-      sourceUpdates[source]++;
-    } else {
-      sourceUpdates[source] = 1;
-    }
+    // TODO: ignore silent updates!
     if (index <= nextIndex) {
       nextValue = value;
       nextIndex = index;
     }
-    var ready = true;
-    for (var k in sourceUpdates) {
-      if (sourceUpdates.hasOwnProperty(k)) {
-        if (sourceUpdates[k] < sourceExpected[k]) {
-          ready = false;
-          break;
-        }
-      }
-    }
-    if (ready) {
-      sourceUpdates = {};
+    if (checkExpectedSources(sources, source)) {
       nextIndex = Infinity;
       s._update(nextValue, silent, source);
     }
@@ -178,16 +186,13 @@ export interface MapN {
 export var mapN: MapN = function (...args) {
   var fn: (...values) => void = args.pop();
   var signals: Array<Signal<any>> = args;
-  var sources = signals.reduce((sources, s) => sources.concat(s._sources), []);
+  var sources = getSources(signals);
   var value = () => fn.apply(undefined, signals.map(s => s._value));
   var s = new Signal(sources, value());
-  var updates = 0;
-  var expected = signals.length;
   var silentBatch = true;
   var update = (v, silent, source) => {
     if (!silent) silentBatch = false;
-    if (++updates === expected) {
-      updates = 0;
+    if (checkExpectedSources(sources, source)) {
       silentBatch = true;
       s._update(silent ? undefined : value(), silent, source);
     }
@@ -211,20 +216,5 @@ export interface SubscribeN {
 };
 
 export var subscribeN: SubscribeN = function (...args) {
-  var fn: (...values) => void = args.pop();
-  var signals: Array<Signal<any>> = args;
-  var run = () => fn.apply(undefined, signals.map(s => s._value));
-  var updates = 0;
-  var expected = signals.length;
-  var silentBatch = true;
-  var update = (v, silent: Boolean) => {
-    if (!silent) silentBatch = false;
-    if (++updates === expected) {
-      updates = 0;
-      silentBatch = true;
-      run();
-    }
-  };
-  signals.forEach(signal => signal._listeners.push(update));
-  run();
+  mapN.apply(undefined, args);
 };
