@@ -111,7 +111,13 @@ export function channel<A>(value: A): Channel<A> {
   return new Channel(value);
 }
 
-function getSources(signals) {
+interface MultiSourceState {
+  sources: Array<string>;
+  expected: Dictionary<number>;
+  updates: Dictionary<number>;
+}
+
+function getSources(signals: Array<Signal<any>>): MultiSourceState {
   var sources = [];
   var expected: Dictionary<number> = {};
   signals.forEach(s => {
@@ -126,7 +132,7 @@ function getSources(signals) {
   });
   return { sources: sources, expected: expected, updates: {} };
 }
-function checkExpectedSources(sources, source) {
+function checkExpectedSources(sources: MultiSourceState, source: string): boolean {
   if (sources.updates[source]) {
     sources.updates[source]++;
   } else {
@@ -149,7 +155,7 @@ export function merge<A>(...signals: Array<Signal<A>>): Signal<A> {
   var sources = getSources(signals);
   var nextValue = signals[0]._value;
   var nextIndex = Infinity;
-  var s = new Signal(sources, nextValue);
+  var s = new Signal(sources.sources, nextValue);
   var update = (value, silent, source, index) => {
     // TODO: ignore silent updates!
     if (index <= nextIndex) {
@@ -188,7 +194,7 @@ export var mapN: MapN = function (...args) {
   var signals: Array<Signal<any>> = args;
   var sources = getSources(signals);
   var value = () => fn.apply(undefined, signals.map(s => s._value));
-  var s = new Signal(sources, value());
+  var s = new Signal(sources.sources, value());
   var silentBatch = true;
   var update = (v, silent, source) => {
     if (!silent) silentBatch = false;
