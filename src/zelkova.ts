@@ -1,22 +1,33 @@
 "use strict";
 
+var nextID: () => string = (function() {
+  var count = 0;
+  return () => "signal-" + (++count);
+}());
+
 export interface Listener<A> {
-  (value: A, silent: Boolean): void;
+  (value: A, silent: Boolean, source: string): void;
+}
+
+interface Dictionary<A> {
+  [index: string]: A;
 }
 
 export class Signal<A> {
 
+  _sources: Array<string>;
   _value: A;
   _listeners: Array<Listener<A>>;
 
-  constructor(value: A) {
+  constructor(sources: Array<string>, value: A) {
+    this._sources = sources;
     this._value = value;
     this._listeners = [];
   }
 
-  _update(value: A, silent: Boolean): void {
+  _update(value: A, silent: Boolean, source: string): void {
     if (!silent) this._value = value;
-    this._listeners.forEach(fn => fn(value, silent));
+    this._listeners.forEach(fn => fn(value, silent, source));
   }
 
   subscribe(fn: (value: A) => void): void {
@@ -27,17 +38,17 @@ export class Signal<A> {
   }
 
   map<B>(fn: (value: A) => B): Signal<B> {
-    var s = new Signal(fn(this._value));
-    this._listeners.push((value, silent) => {
-      s._update(silent ? undefined : fn(value), silent);
+    var s = new Signal(this._sources, fn(this._value));
+    this._listeners.push((value, silent, source) => {
+      s._update(silent ? undefined : fn(value), silent, source);
     });
     return s;
   }
 
   private filterIf(val: boolean, fn: (value: A) => boolean, initValue: A): Signal<A> {
-    var s = new Signal(fn(this._value) === val ? this._value : initValue);
-    this._listeners.push((value, silent) => {
-      s._update(value, silent || fn(value) !== val);
+    var s = new Signal(this._sources, fn(this._value) === val ? this._value : initValue);
+    this._listeners.push((value, silent, source) => {
+      s._update(value, silent || fn(value) !== val, source);
     });
     return s;
   }
@@ -57,14 +68,14 @@ export class Signal<A> {
   }
 
   dropRepeats(fn?: (prev: A, next: A) => boolean): Signal<A> {
-    var s = new Signal(this._value);
+    var s = new Signal(this._sources, this._value);
     var test = fn == null ? (x, y) => x === y : fn;
     var prevValue = this._value;
-    this._listeners.push((value, silent) => {
+    this._listeners.push((value, silent, source) => {
       if (silent || test(prevValue, value)) {
-        s._update(undefined, true);
+        s._update(undefined, true, source);
       } else {
-        s._update(prevValue = value, false);
+        s._update(prevValue = value, false, source);
       }
     });
     return s;
@@ -73,19 +84,21 @@ export class Signal<A> {
 }
 
 export function constant<A>(value: A): Signal<A> {
-  return new Signal(value);
+  return new Signal([nextID()], value);
 };
 
 export class Channel<A> {
 
+  source: string;
   signal: Signal<A>;
 
   constructor(value: A) {
-    this.signal = new Signal(value);
+    this.source = nextID();
+    this.signal = new Signal([this.source], value);
   }
 
   send(value: A): Channel<A> {
-    this.signal._update(value, false);
+    this.signal._update(value, false, this.source);
     return this;
   }
 
@@ -99,10 +112,50 @@ export function channel<A>(value: A): Channel<A> {
 }
 
 export function merge<A>(...signals: Array<Signal<A>>): Signal<A> {
-  var s = new Signal(signals[0]._value);
-  signals.forEach(signal => {
-    signal._listeners.push((value, silent) => {
-      s._update(value, silent);
+  var sources = [];
+  var sourceExpected: Dictionary<number> = {};
+  signals.forEach(s => {
+    s._sources.forEach(source => {
+      if (sourceExpected[source]) {
+        sourceExpected[source]++;
+      } else {
+        sources.push(source);
+        sourceExpected[source] = 1;
+      }
+    });
+  });
+  var nextValue = signals[0]._value;
+  var nextIndex = Infinity;
+  var s = new Signal(sources, nextValue);
+  var sourceUpdates: Dictionary<number> = {};
+  var update = (value, silent, source, index) => {
+    if (sourceUpdates[source]) {
+      sourceUpdates[source]++;
+    } else {
+      sourceUpdates[source] = 1;
+    }
+    if (index <= nextIndex) {
+      nextValue = value;
+      nextIndex = index;
+    }
+    var ready = true;
+    for (var k in sourceUpdates) {
+      if (sourceUpdates.hasOwnProperty(k)) {
+        if (sourceUpdates[k] < sourceExpected[k]) {
+          ready = false;
+          break;
+        }
+      }
+    }
+    if (ready) {
+      sourceUpdates = {};
+      nextIndex = Infinity;
+      s._update(nextValue, silent, source);
+    }
+  };
+  signals.forEach((signal, i) => {
+    signal._listeners.push((value, silent, source) => {
+      update(value, silent, source, i);
     });
   });
   return s;
@@ -125,17 +178,18 @@ export interface MapN {
 export var mapN: MapN = function (...args) {
   var fn: (...values) => void = args.pop();
   var signals: Array<Signal<any>> = args;
+  var sources = signals.reduce((sources, s) => sources.concat(s._sources), []);
   var value = () => fn.apply(undefined, signals.map(s => s._value));
-  var s = new Signal(value());
+  var s = new Signal(sources, value());
   var updates = 0;
   var expected = signals.length;
   var silentBatch = true;
-  var update = (v, silent: Boolean) => {
+  var update = (v, silent, source) => {
     if (!silent) silentBatch = false;
     if (++updates === expected) {
       updates = 0;
       silentBatch = true;
-      s._update(silent ? undefined : value(), silent);
+      s._update(silent ? undefined : value(), silent, source);
     }
   };
   signals.forEach(signal => signal._listeners.push(update));

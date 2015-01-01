@@ -187,21 +187,35 @@ module.exports = {
       c2.send(20);
       c2.send(200);
       c1.send(100);
-    }/*,
-    "should only take the left-most value when updates arrive simultaneously": function (test) {
-      test.pending();
-      var c = Z.channel(1);
-      var s1 = c.signal;
-      var s2 = s1.map(function (n) { return n * 100; });
-      var expectedValues = [1, 2, 3];
-      Z.merge(s1, s2).subscribe(function (value) {
-        if (expectedValues.length > 0) {
-          test.strictEqual(value, expectedValues.shift());
-          if (expectedValues.length === 0) test.done();
-        }
-      });
-      c.send(2).send(3);
-    }*/
+    },
+    "should only take the left-most value when updates arrive simultaneously": [
+      function (test) {
+        var c = Z.channel(1);
+        var s1 = c.signal;
+        var s2 = s1.map(function (n) { return n * 100; });
+        var expectedValues = [1, 2, 3];
+        Z.merge(s1, s2).subscribe(function (value) {
+          if (expectedValues.length > 0) {
+            test.strictEqual(value, expectedValues.shift());
+            if (expectedValues.length === 0) test.done();
+          }
+        });
+        c.send(2).send(3);
+      },
+      function (test) {
+        var c = Z.channel(1);
+        var s1 = c.signal;
+        var s2 = s1.map(function (n) { return n * 100; });
+        var expectedValues = [100, 200, 300];
+        Z.merge(s2, s1).subscribe(function (value) {
+          if (expectedValues.length > 0) {
+            test.strictEqual(value, expectedValues.shift());
+            if (expectedValues.length === 0) test.done();
+          }
+        });
+        c.send(2).send(3);
+      }
+    ]
   },
 
   "mapN": {
