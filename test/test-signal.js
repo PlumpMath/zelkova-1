@@ -214,6 +214,25 @@ module.exports = {
           }
         });
         c.send(2).send(3);
+      },
+      function (test) {
+        var c1 = Z.channel(1);
+        var c2 = Z.channel(1);
+        var s1 = c1.signal;
+        var s2 = s1.map(function (n) { return n * 100; });
+        var s3 = c2.signal;
+        s3.subscribe(function (value) {
+          c1.send(value);
+        });
+        var expectedValues = [100, 200, 300];
+        Z.merge(s2, s1, s3).subscribe(function (value) {
+          if (expectedValues.length > 0) {
+            test.strictEqual(value, expectedValues.shift());
+            if (expectedValues.length === 0) test.done();
+          }
+        });
+        c1.send(2)
+        c2.send(3);
       }
     ]
   },
