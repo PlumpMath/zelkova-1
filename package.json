@@ -1,6 +1,6 @@
 {
   "name": "zelkova",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "Elm-inspired FRP for TypeScript and JavaScript",
   "main": "dist/zelkova.js",
   "repository": {
