@@ -4,6 +4,8 @@ var ts = require("gulp-typescript");
 var tslint = require("gulp-tslint");
 var eventStream = require("event-stream");
 var nodeunit = require("gulp-nodeunit");
+var vmap = require("vinyl-map");
+var path = require("path");
 
 var tsPath = "src/*.ts";
 var testPath = "test/test-*.js";
@@ -35,13 +37,21 @@ gulp.task("lint", function () {
     }));
 });
 
+// Make the generated defs file actually useful
+var tweakDefs = vmap(function (data, filename) {
+  var moduleName = path.basename(filename, ".d.ts");
+  return data.toString("utf8")
+    .replace("declare module " + moduleName + " {", "declare module '" + moduleName + "' {")
+    .replace("export = " + moduleName + ";", "");
+});
+
 gulp.task("make", ["clean", "lint"], function () {
   var tsResult = gulp
     .src(tsPath)
     .pipe(ts(tsProject));
 
   return eventStream
-    .merge(tsResult.dts.pipe(gulp.dest("dist")),
+    .merge(tsResult.dts.pipe(tweakDefs).pipe(gulp.dest("dist")),
            tsResult.js.pipe(gulp.dest("dist")))
     .on("error", printError);
 });
