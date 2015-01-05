@@ -5,16 +5,6 @@ var test = require("./common").test;
 
 module.exports = {
 
-  "constant": {
-    "should create a signal with the specified value": function (test) {
-      test.expect(1);
-      var v = {};
-      var s = Z.constant(v);
-      test.strictEqual(s._value, v);
-      test.done();
-    }
-  },
-
   "subscribe": {
     "should pass the signal's value to the callback": function (test) {
       test.expect(1);
@@ -194,9 +184,7 @@ module.exports = {
       var c1 = Z.channel(1);
       var c2 = Z.channel(2);
       Z.merge(c1.signal, c2.signal).subscribe(function (value) {
-        if (expectedValues.length > 0) {
-          test.strictEqual(value, expectedValues.shift());
-        }
+        test.strictEqual(value, expectedValues.shift());
       });
       c1.send(10);
       c2.send(20);
@@ -212,9 +200,7 @@ module.exports = {
         var s1 = c.signal;
         var s2 = s1.map(function (n) { return n * 100; });
         Z.merge(s1, s2).subscribe(function (value) {
-          if (expectedValues.length > 0) {
-            test.strictEqual(value, expectedValues.shift());
-          }
+          test.strictEqual(value, expectedValues.shift());
         });
         c.send(2).send(3);
         test.done();
@@ -226,9 +212,7 @@ module.exports = {
         var s1 = c.signal;
         var s2 = s1.map(function (n) { return n * 100; });
         Z.merge(s2, s1).subscribe(function (value) {
-          if (expectedValues.length > 0) {
-            test.strictEqual(value, expectedValues.shift());
-          }
+          test.strictEqual(value, expectedValues.shift());
         });
         c.send(2).send(3);
         test.done();
@@ -245,9 +229,7 @@ module.exports = {
           c1.send(value);
         });
         Z.merge(s2, s1, s3).subscribe(function (value) {
-          if (expectedValues.length > 0) {
-            test.strictEqual(value, expectedValues.shift());
-          }
+          test.strictEqual(value, expectedValues.shift());
         });
         c1.send(2)
         c2.send(3);
