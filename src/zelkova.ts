@@ -8,109 +8,138 @@ module zelkova {
   }());
 
   export interface Listener<A> {
-    (value: A, silent: Boolean, source: string): void;
+    (value: A, silent: boolean, source: string): void;
+  }
+
+  export interface BufferItem<A> {
+    value: A;
+    silent: boolean;
+    source: string;
   }
 
   interface Dictionary<A> {
     [index: string]: A;
   }
 
-  export class Signal<A> {
+  export interface Signal<A> {
+    id: string;
+    subscribe(fn: (value: A) => void): void;
+    map<B>(fn: (value: A) => B): Signal<B>;
+    keepIf(fn: (value: A) => boolean, initValue: A): Signal<A>;
+    dropIf(fn: (value: A) => boolean, initValue: A): Signal<A>;
+    dropRepeats(fn?: (prev: A, next: A) => boolean): Signal<A>;
+  }
 
-    _sources: Array<string>;
-    _value: A;
-    _listeners: Array<Listener<A>>;
+  interface SignalRecord<A> {
+    value: A;
+    listeners: Array<Listener<A>>;
+    sources: Array<string>
+  }
 
-    constructor(sources: Array<string>, value: A) {
-      this._sources = sources;
-      this._value = value;
-      this._listeners = [];
-    }
+  var signals: Dictionary<SignalRecord<any>> = {};
 
-    _update(value: A, silent: Boolean, source: string): void {
-      if (!silent) this._value = value;
-      this._listeners.forEach(fn => fn(value, silent, source));
-    }
+  function subscribe<A>(id: string, listener: Listener<A>): void {
+    var signal = signals[id];
+    if (!signal) throw new Error("Unknown signal '" + id + "'");
+    signal.listeners.push(listener);
+  }
 
-    subscribe(fn: (value: A) => void): void {
-      this._listeners.push((value, silent) => {
-        if (!silent) fn(value);
-      });
-      fn(this._value);
-    }
+  function update<A>(id: string, value: A, silent: boolean, source: string): void {
+    var signal = signals[id];
+    if (!signal) throw new Error("Unknown signal '" + id + "'");
+    if (!silent) signal.value = value;
+    signal.listeners.forEach(fn => fn(value, silent, source));
+  }
 
-    map<B>(fn: (value: A) => B): Signal<B> {
-      var s = new Signal(this._sources, fn(this._value));
-      this._listeners.push((value, silent, source) => {
-        s._update(silent ? undefined : fn(value), silent, source);
+  function signal<A>(sources: Array<string>, initValue: A): Signal<A> {
+    var id = nextID();
+    var record = {
+      value: initValue,
+      listeners: [],
+      sources: sources.slice()
+    };
+    signals[id] = record;
+
+    function filterIf(val: boolean, fn: (value: A) => boolean, initValue: A): Signal<A> {
+      var s = signal(sources, fn(record.value) === val ? record.value : initValue);
+      subscribe(id, (value: A, silent, source) => {
+        update(s.id, value, silent || fn(value) !== val, source);
       });
       return s;
     }
 
-    private filterIf(val: boolean, fn: (value: A) => boolean, initValue: A): Signal<A> {
-      var s = new Signal(this._sources, fn(this._value) === val ? this._value : initValue);
-      this._listeners.push((value, silent, source) => {
-        s._update(value, silent || fn(value) !== val, source);
-      });
-      return s;
-    }
+    return {
 
-    keepIf(fn: (value: A) => boolean, initValue: A): Signal<A> {
-      if (arguments.length < 2) {
-        throw new Error("keepIf requires a predicate and default value");
-      }
-      return this.filterIf(true, fn, initValue);
-    }
+      id: id,
 
-    dropIf(fn: (value: A) => boolean, initValue: A): Signal<A> {
-      if (arguments.length < 2) {
-        throw new Error("dropIf requires a predicate and default value");
-      }
-      return this.filterIf(false, fn, initValue);
-    }
+      subscribe: (fn): void => {
+        subscribe(id, (value: A, silent) => {
+          if (!silent) fn(value);
+        });
+        fn(record.value);
+      },
 
-    dropRepeats(fn?: (prev: A, next: A) => boolean): Signal<A> {
-      var s = new Signal(this._sources, this._value);
-      var test = fn == null ? (x, y) => x === y : fn;
-      var prevValue = this._value;
-      this._listeners.push((value, silent, source) => {
-        if (silent || test(prevValue, value)) {
-          s._update(undefined, true, source);
-        } else {
-          s._update(prevValue = value, false, source);
+      map: (fn) => {
+        var s = signal(sources, fn(record.value));
+        subscribe(id, (value, silent, source) => {
+          update(s.id, silent ? undefined : fn(value), silent, source);
+        });
+        return s;
+      },
+
+      keepIf: (fn, initValue) => {
+        if (arguments.length < 2) {
+          throw new Error("keepIf requires a predicate and default value");
         }
-      });
-      return s;
-    }
+        return filterIf(true, fn, initValue);
+      },
 
+      dropIf: (fn, initValue) => {
+        if (arguments.length < 2) {
+          throw new Error("dropIf requires a predicate and default value");
+        }
+        return filterIf(false, fn, initValue);
+      },
+
+      dropRepeats: (fn?) => {
+        var prevValue = record.value;
+        var s = signal(sources, prevValue);
+        var test = fn == null ? (x, y) => x === y : fn;
+        subscribe(id, (value: A, silent, source) => {
+          if (silent || test(prevValue, value)) {
+            update(s.id, undefined, true, source);
+          } else {
+            update(s.id, prevValue = value, false, source);
+          }
+        });
+        return s;
+      }
+    };
   }
 
   export function constant<A>(value: A): Signal<A> {
-    return new Signal([nextID()], value);
+    return signal([nextID()], value);
   };
 
-  export class Channel<A> {
-
-    source: string;
+  export interface Channel<A> {
     signal: Signal<A>;
-
-    constructor(value: A) {
-      this.source = nextID();
-      this.signal = new Signal([this.source], value);
-    }
-
-    send(value: A): Channel<A> {
-      this.signal._update(value, false, this.source);
-      return this;
-    }
-
+    send(value: A): Channel<A>;
   };
 
   export function channel<A>(value: A): Channel<A> {
     if (arguments.length === 0) {
       throw new Error("A default value must be provided for a Channel");
     }
-    return new Channel(value);
+    var sourceID = nextID();
+    var s = signal([sourceID], value);
+    var channel = {
+      signal: s,
+      send: (value) => {
+        update(s.id, value, false, sourceID);
+        return channel;
+      }
+    };
+    return channel;
   }
 
   interface MultiSourceState {
@@ -119,11 +148,11 @@ module zelkova {
     updates: Dictionary<number>;
   }
 
-  function getSources(signals: Array<Signal<any>>): MultiSourceState {
+  function getSources(ss: Array<Signal<any>>): MultiSourceState {
     var sources = [];
     var expected: Dictionary<number> = {};
-    signals.forEach(s => {
-      s._sources.forEach(source => {
+    ss.forEach(s => {
+      signals[s.id].sources.forEach(source => {
         if (expected[source]) {
           expected[source]++;
         } else {
@@ -132,8 +161,13 @@ module zelkova {
         }
       });
     });
-    return { sources: sources, expected: expected, updates: {} };
+    return {
+      sources: sources,
+      expected: expected,
+      updates: {}
+    };
   }
+
   function checkExpectedSources(sources: MultiSourceState, source: string): boolean {
     if (sources.updates[source]) {
       sources.updates[source]++;
@@ -153,25 +187,26 @@ module zelkova {
     return ready;
   }
 
-  export function merge<A>(...signals: Array<Signal<A>>): Signal<A> {
-    var sources = getSources(signals);
-    var nextValue = signals[0]._value;
+  export function merge<A>(...inputs: Array<Signal<A>>): Signal<A> {
+    var sources = getSources(inputs);
+    var nextValue = signals[inputs[0].id].value;
     var nextIndex = Infinity;
-    var s = new Signal(sources.sources, nextValue);
-    var update = (value, silent, source, index) => {
-      // TODO: ignore silent updates!
+    var s = signal(sources.sources, nextValue);
+    var updateSignal = (value, silent, source, index) => {
+      // console.log(value, silent, source, index);
+      // TODO: ignore silent updates
       if (index <= nextIndex) {
         nextValue = value;
         nextIndex = index;
       }
       if (checkExpectedSources(sources, source)) {
         nextIndex = Infinity;
-        s._update(nextValue, silent, source);
+        update(s.id, nextValue, silent, source);
       }
     };
-    signals.forEach((signal, i) => {
-      signal._listeners.push((value, silent, source) => {
-        update(value, silent, source, i);
+    inputs.forEach((signal, i) => {
+      subscribe(signal.id, (value, silent, source) => {
+        updateSignal(value, silent, source, i);
       });
     });
     return s;
@@ -193,19 +228,19 @@ module zelkova {
 
   export var mapN: MapN = function (...args) {
     var fn: (...values) => void = args.pop();
-    var signals: Array<Signal<any>> = args;
-    var sources = getSources(signals);
-    var value = () => fn.apply(undefined, signals.map(s => s._value));
-    var s = new Signal(sources.sources, value());
+    var inputs: Array<Signal<any>> = args;
+    var sources = getSources(inputs);
+    var value = () => fn.apply(undefined, inputs.map(s => signals[s.id].value));
+    var s = signal(sources.sources, value());
     var silentBatch = true;
-    var update = (v, silent, source) => {
+    var updateSignal = (v, silent, source) => {
       if (!silent) silentBatch = false;
       if (checkExpectedSources(sources, source)) {
         silentBatch = true;
-        s._update(silent ? undefined : value(), silent, source);
+        update(s.id, silent ? undefined : value(), silent, source);
       }
     };
-    signals.forEach(signal => signal._listeners.push(update));
+    inputs.forEach(signal => subscribe(signal.id, updateSignal));
     return s;
   };
 
