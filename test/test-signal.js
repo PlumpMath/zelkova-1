@@ -294,9 +294,9 @@ module.exports = {
       var s3 = s2.map(function (x) { return x * 10 });
       Z.mapN(s1, s2, s3, function (x, y, z) {
         test.deepEqual([x, y, z], expectedValues.shift());
-        if (expectedValues.length === 0) test.done();
       });
       chan.send(2).send(3);
+      test.done();
     }
   },
 
